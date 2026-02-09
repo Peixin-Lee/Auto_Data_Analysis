@@ -25,7 +25,7 @@ import requests
 from dotenv import load_dotenv
 
 # 加载环境变量
-load_dotenv('/home/MuyuWorkSpace/03_DataAnalysis/backend/Data_analysis/.env')
+load_dotenv('c:/Users/Xin/Desktop/codes/LM/DataAnalysis/backend/Data_analysis/.env')
 
 # -----------------------
 # 配置
@@ -46,19 +46,19 @@ app.add_middleware(
 
 # 从环境变量加载配置
 class Config:
-    # DeepSeek-OCR配置
-    DEEPSEEK_OCR_URL = os.getenv('DEEPSEEK_OCR_URL', 'http://192.168.110.131:8707/ocr')
+    # # DeepSeek-OCR配置
+    # DEEPSEEK_OCR_URL = os.getenv('DEEPSEEK_OCR_URL')
 
     # 数据分析配置
-    QWEN_TOKENIZER_PATH = os.getenv('QWEN_TOKENIZER_PATH', '/home/data/nongwa/workspace/Data_analysis/Qwen-tokenizer')
-    ANALYSIS_API_KEY = os.getenv('ANALYSIS_API_KEY')  # 请在 .env 文件中配置
-    ANALYSIS_API_BASE = os.getenv('ANALYSIS_API_BASE', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
-    ANALYSIS_MODEL_NAME = os.getenv('ANALYSIS_MODEL_NAME', 'qwen3-max')
+    QWEN_TOKENIZER_PATH = os.getenv('QWEN_TOKENIZER_PATH')
+    ANALYSIS_API_KEY = os.getenv('ANALYSIS_API_KEY') 
+    ANALYSIS_API_BASE = os.getenv('ANALYSIS_API_BASE')
+    ANALYSIS_MODEL_NAME = os.getenv('ANALYSIS_MODEL_NAME')
 
     # 可视化配置
-    VISUALIZER_API_KEY = os.getenv('VISUALIZER_API_KEY')  # 请在 .env 文件中配置
-    VISUALIZER_API_BASE = os.getenv('VISUALIZER_API_BASE', 'https://aizex.top/v1')
-    VISUALIZER_MODEL_NAME = os.getenv('VISUALIZER_MODEL_NAME', 'gpt-5')
+    VISUALIZER_API_KEY = os.getenv('VISUALIZER_API_KEY')
+    VISUALIZER_API_BASE = os.getenv('VISUALIZER_API_BASE')
+    VISUALIZER_MODEL_NAME = os.getenv('VISUALIZER_MODEL_NAME')
 
     # API服务配置
     API_HOST = os.getenv('API_HOST', '0.0.0.0')
@@ -116,6 +116,7 @@ class ProcessingStatus(BaseModel):
 # 任务状态管理
 # -----------------------
 class TaskManager:
+    # pending → ocr_processing → analyzing → visualizing → completed
     def __init__(self):
         self.tasks: Dict[str, ProcessingStatus] = {}
 
@@ -157,113 +158,116 @@ class TaskManager:
 
 task_manager = TaskManager()
 
-# -----------------------
-# 处理器类
-# -----------------------
-class OCRProcessor:
-    """OCR处理器"""
-    def __init__(self):
-        self.ocr_url = config.DEEPSEEK_OCR_URL
+# # -----------------------
+# # OCR处理器类
+# # -----------------------
+# class OCRProcessor:
+#     """OCR处理器"""
+#     def __init__(self):
+#         self.ocr_url = config.DEEPSEEK_OCR_URL
 
-    async def process(self, file_path: str, enable_description: bool = False) -> OCRResult:
-        """调用OCR服务或处理文本文件"""
-        start_time = time.time()
-        file_ext = Path(file_path).suffix.lower()
+#     async def process(self, file_path: str, enable_description: bool = False) -> OCRResult:
+#         """调用OCR服务或处理文本文件"""
+#         start_time = time.time()
+#         file_ext = Path(file_path).suffix.lower()
 
-        try:
-            # 对于文本文件，直接读取内容
-            if file_ext in ['.txt', '.md']:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
+#         try:
+#             # 对于文本文件，直接读取内容
+#             if file_ext in ['.txt', '.md']:
+#                 with open(file_path, 'r', encoding='utf-8') as f:
+#                     content = f.read()
 
-                # 生成模拟的Markdown结果
-                markdown_content = f"""# 文档分析报告
+#                 # 生成模拟的Markdown结果
+#                 markdown_content = f"""# 文档分析报告
 
-## 文件信息
-- 文件名: {Path(file_path).name}
-- 文件大小: {os.path.getsize(file_path)} bytes
-- 文件类型: 文本文件
+# ## 文件信息
+# - 文件名: {Path(file_path).name}
+# - 文件大小: {os.path.getsize(file_path)} bytes
+# - 文件类型: 文本文件
 
-## 文档内容
+# ## 文档内容
 
-{content}
+# {content}
 
-## 关键信息提取
+# ## 关键信息提取
 
-### 主要内容概要
-- 文档类型: {file_ext.replace('.', '').upper()} 文件
-- 内容长度: {len(content)} 字符
-- 处理时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
+# ### 主要内容概要
+# - 文档类型: {file_ext.replace('.', '').upper()} 文件
+# - 内容长度: {len(content)} 字符
+# - 处理时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
 
-### 结构化信息
-- 标题/章节: 已识别 {content.count('#')} 个标题
-- 段落数量: 已识别 {len(content.split(chr(10) + chr(10)))} 个段落
-- 关键词: 自动提取中...
+# ### 结构化信息
+# - 标题/章节: 已识别 {content.count('#')} 个标题
+# - 段落数量: 已识别 {len(content.split(chr(10) + chr(10)))} 个段落
+# - 关键词: 自动提取中...
 
----
-*此为文本文件直接处理结果，如需OCR识别请上传图片或PDF文件*
-"""
+# ---
+# *此为文本文件直接处理结果，如需OCR识别请上传图片或PDF文件*
+# """
 
-                processing_time = time.time() - start_time
+#                 processing_time = time.time() - start_time
 
-                return OCRResult(
-                    markdown=markdown_content,
-                    page_count=1,
-                    file_name=Path(file_path).name,
-                    file_info={
-                        'original_name': Path(file_path).name,
-                        'size_bytes': os.path.getsize(file_path),
-                        'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
-                        'file_type': 'text',
-                        'processing_mode': 'direct_text'
-                    },
-                    processing_time=processing_time,
-                    status='success'
-                )
+#                 return OCRResult(
+#                     markdown=markdown_content,
+#                     page_count=1,
+#                     file_name=Path(file_path).name,
+#                     file_info={
+#                         'original_name': Path(file_path).name,
+#                         'size_bytes': os.path.getsize(file_path),
+#                         'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+#                         'file_type': 'text',
+#                         'processing_mode': 'direct_text'
+#                     },
+#                     processing_time=processing_time,
+#                     status='success'
+#                 )
 
-            # 对于图片和PDF文件，调用OCR服务
-            else:
-                with open(file_path, 'rb') as f:
-                    files = {'file': f}
-                    data = {'enable_description': str(enable_description)}
+#             # 对于图片和PDF文件，调用OCR服务
+#             else:
+#                 with open(file_path, 'rb') as f:
+#                     files = {'file': f}
+#                     data = {'enable_description': str(enable_description)}
 
-                    response = requests.post(
-                        self.ocr_url,
-                        files=files,
-                        data=data,
-                        timeout=300
-                    )
+#                     response = requests.post(
+#                         self.ocr_url,
+#                         files=files,
+#                         data=data,
+#                         timeout=300
+#                     )
 
-                if response.status_code != 200:
-                    raise HTTPException(500, f"OCR服务错误: {response.status_code} {response.text}")
+#                 if response.status_code != 200:
+#                     raise HTTPException(500, f"OCR服务错误: {response.status_code} {response.text}")
 
-                result = response.json()
-                processing_time = time.time() - start_time
+#                 result = response.json()
+#                 processing_time = time.time() - start_time
 
-                return OCRResult(
-                    markdown=result.get('markdown', ''),
-                    page_count=result.get('page_count', 0),
-                    file_name=result.get('file_name', Path(file_path).name),
-                    file_info={
-                        'original_name': Path(file_path).name,
-                        'size_bytes': os.path.getsize(file_path),
-                        'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
-                        'file_type': 'ocr_processed',
-                        'processing_mode': 'ocr_service'
-                    },
-                    processing_time=processing_time,
-                    status='success'
-                )
+#                 return OCRResult(
+#                     markdown=result.get('markdown', ''),
+#                     page_count=result.get('page_count', 0),
+#                     file_name=result.get('file_name', Path(file_path).name),
+#                     file_info={
+#                         'original_name': Path(file_path).name,
+#                         'size_bytes': os.path.getsize(file_path),
+#                         'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+#                         'file_type': 'ocr_processed',
+#                         'processing_mode': 'ocr_service'
+#                     },
+#                     processing_time=processing_time,
+#                     status='success'
+#                 )
 
-        except Exception as e:
-            raise HTTPException(500, f"OCR处理失败: {str(e)}")
+#         except Exception as e:
+#             raise HTTPException(500, f"OCR处理失败: {str(e)}")
 
 class InformationProcessor:
     """信息结构化处理器"""
     def __init__(self):
         # 动态导入Information_structuring模块
         import sys
-        sys.path.append('/home/MuyuWorkSpace/03_DataAnalysis/backend/Data_analysis/backwark')
+        # 使用相对路径，兼容 Windows 和 Linux
+        backwark_path = str(Path(__file__).parent / 'backwark')
+        if backwark_path not in sys.path:
+            sys.path.insert(0, backwark_path)
         from Information_structuring import DataAnalyzer
 
         self.analyzer = DataAnalyzer(
@@ -299,7 +303,10 @@ class VisualizationProcessor:
     def __init__(self):
         # 动态导入visualizer模块
         import sys
-        sys.path.append('/home/MuyuWorkSpace/03_DataAnalysis/backend/Data_analysis/backwark')
+        # 使用相对路径，兼容 Windows 和 Linux
+        backwark_path = str(Path(__file__).parent / 'backwark')
+        if backwark_path not in sys.path:
+            sys.path.insert(0, backwark_path)
 
         try:
             from visualizer import ReportGenerator
@@ -312,7 +319,9 @@ class VisualizationProcessor:
         except Exception as e:
             print(f"⚠️ 无法加载真实可视化服务，使用模拟服务: {e}")
             # 使用模拟服务
-            sys.path.append('/home/MuyuWorkSpace/03_DataAnalysis/backend/Data_analysis')
+            parent_path = str(Path(__file__).parent)
+            if parent_path not in sys.path:
+                sys.path.insert(0, parent_path)
             from mock_visualizer import MockReportGenerator
             self.generator = MockReportGenerator(
                 api_key=config.VISUALIZER_API_KEY,
@@ -342,7 +351,9 @@ class VisualizationProcessor:
                 # 真实服务失败时，尝试使用模拟服务
                 try:
                     import sys
-                    sys.path.append('/home/MuyuWorkSpace/03_DataAnalysis/backend/Data_analysis')
+                    parent_path = str(Path(__file__).parent)
+                    if parent_path not in sys.path:
+                        sys.path.insert(0, parent_path)
                     from mock_visualizer import MockReportGenerator
                     mock_generator = MockReportGenerator(
                         api_key=config.VISUALIZER_API_KEY,

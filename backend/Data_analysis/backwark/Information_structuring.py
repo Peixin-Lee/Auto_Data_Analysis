@@ -18,15 +18,15 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 # ==================== 配置 ====================
-TOKENIZER_PATH = os.getenv("QWEN_TOKENIZER_PATH", "/home/data/nongwa/workspace/Data_analysis/Qwen-tokenizer")
+TOKENIZER_PATH = os.getenv("QWEN_TOKENIZER_PATH")
 tokenizer = Qwen2TokenizerFast.from_pretrained(TOKENIZER_PATH)
 CHUNK_SIZE = int(os.getenv("ANALYSIS_CHUNK_SIZE", "1500"))  # token数
 MAX_WORKERS = int(os.getenv("ANALYSIS_MAX_WORKERS", "10"))  # ✅ 并发数
 
 # API 配置（从 .env 文件读取）
-API_KEY = os.getenv("ANALYSIS_API_KEY")  # 请在 .env 文件中配置
-API_BASE = os.getenv("ANALYSIS_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-MODEL_NAME = os.getenv("ANALYSIS_MODEL_NAME", "qwen3-max")
+API_KEY = os.getenv("ANALYSIS_API_KEY")
+API_BASE = os.getenv("ANALYSIS_API_BASE")
+MODEL_NAME = os.getenv("ANALYSIS_MODEL_NAME")
 
 # ==================== 数据模型 ====================
 class ExtractedTable(BaseModel):
