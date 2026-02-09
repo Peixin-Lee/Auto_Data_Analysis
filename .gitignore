@@ -1,0 +1,81 @@
+# 环境变量和敏感信息
+.env
+*.env.local
+*.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 前端构建产物
+frontend/dist/
+frontend/build/
+.vite/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 日志文件
+logs/
+*.log
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+company.db
+
+# OCR 输出和临时文件
+backend/Data_analysis/DeepSeek-OCR-vllm/output/
+backend/Data_analysis/DeepSeek-OCR-vllm/logs/
+
+# 分析结果（可选，如果不想上传）
+backend/Data_analysis/backwark/analyzed_result.json
+backend/Data_analysis/backwark/report_*.html
+
+# 模型文件（通常很大）
+*.pt
+*.pth
+*.bin
+*.onnx
