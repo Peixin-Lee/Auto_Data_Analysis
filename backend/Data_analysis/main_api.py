@@ -158,9 +158,184 @@ class TaskManager:
 
 task_manager = TaskManager()
 
-# # -----------------------
-# # OCR处理器类
-# # -----------------------
+# -----------------------
+# OCR处理器类
+# -----------------------
+class OCRProcessor:
+    """Qwen-VL模型OCR处理器"""
+    def __init__(self):
+        from openai import OpenAI
+
+        self.client = OpenAI(
+            api_key=os.getenv('VL_API_KEY'),
+            base_url=os.getenv('VL_API_BASE_URL'),
+        )
+        self.model = os.getenv('VL_MODEL_NAME', 'qwen3-vl-plus')
+        self.prompt = os.getenv('QWEN_VL_OCR_PROMPT', 'qwenvl markdown')
+
+    async def process(self, file_path: str, enable_description: bool = False) -> OCRResult:
+        """主处理函数"""
+        start_time = time.time()
+        file_ext = Path(file_path).suffix.lower()  # 提取文件扩展名
+        
+        try:
+            if file_ext in ['.txt', '.md']:
+                return self._process_text_file(file_path, start_time)
+            elif file_ext == '.pdf':
+                return await self._process_pdf(file_path, start_time, enable_description)
+            else:
+                return await self._process_image(file_path, start_time, enable_description)
+        except Exception as e:
+            raise HTTPException(500, f"OCR处理失败: {str(e)}")
+    
+    def _image_to_base64(self, file_path: str) -> str:
+        """图片转base64"""
+        import base64
+        with open(file_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    
+    def _process_text_file(self, file_path: str, start_time: float) -> OCRResult:
+        """处理文本文件"""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 生成模拟的Markdown结果
+        markdown_content = f"""# 文档分析报告
+
+## 文件信息
+- 文件名: {Path(file_path).name}
+- 文件大小: {os.path.getsize(file_path)} bytes
+- 文件类型: 文本文件
+
+## 文档内容
+
+{content}
+
+## 关键信息提取
+
+### 主要内容概要
+- 文档类型: {Path(file_path).suffix.replace('.', '').upper()} 文件
+- 内容长度: {len(content)} 字符
+- 处理时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
+
+### 结构化信息
+- 标题/章节: 已识别 {content.count('#')} 个标题
+- 段落数量: 已识别 {len(content.split(chr(10) + chr(10)))} 个段落
+
+---
+*此为文本文件直接处理结果*
+"""
+        
+        return OCRResult(
+            markdown=markdown_content,
+            page_count=1,
+            file_name=Path(file_path).name,
+            file_info={
+                'original_name': Path(file_path).name,
+                'size_bytes': os.path.getsize(file_path),
+                'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+                'file_type': 'text',
+                'processing_mode': 'direct_text'
+            },
+            processing_time=time.time() - start_time,
+            status='success'
+        )
+
+    async def _process_pdf(self, file_path: str, start_time: float, enable_description: bool) -> OCRResult:
+        """处理PDF文件，转为图片处理"""
+        from pdf2image import convert_from_path
+
+        # PDF转图片
+        images = convert_from_path(file_path, dpi=300)
+        page_results = []
+        for i, image in enumerate(images):
+            # 保存临时图片
+            temp_dir = Path(os.getenv('TEMP_DIR', '/tmp/ocr_temp'))
+            temp_dir.mkdir(exist_ok=True)
+            temp_image_path = temp_dir / f"page_{i}_{int(time.time())}.png"
+            image.save(str(temp_image_path), "PNG")
+
+            try:
+                # 调用处理图片
+                result = await self._process_image(str(temp_image_path), 0, enable_description)
+                page_results.append(result)
+            finally:
+                # 删除临时图片
+                if temp_image_path.exists():
+                    temp_image_path.unlink()
+
+        # 合并页面
+        full_markdown = "\n\n---\n\n".join([result.markdown for result in page_results])
+        return OCRResult(
+            markdown=full_markdown,
+            page_count=len(page_results),
+            file_name=Path(file_path).name,
+            file_info={
+                'original_name': Path(file_path).name,
+                'size_bytes': os.path.getsize(file_path),
+                'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+                'file_type': 'pdf',
+                'processing_mode': 'qwen_vl_ocr'
+            },
+            processing_time=time.time() - start_time,
+            status='success'
+        )
+
+    async def _process_image(self, file_path: str, start_time: float, enable_description: bool) -> OCRResult:
+        """处理单张图片"""
+        # 获取文件扩展名
+        file_ext = Path(file_path).suffix.lower().replace('.', '')
+        # 映射到正确的MIME类型
+        mime_type_map = {
+            'jpg': 'jpeg',
+            'jpeg': 'jpeg',
+            'png': 'png',
+            'gif': 'gif',
+            'bmp': 'bmp',
+            'webp': 'webp'
+        }
+        mime_type = mime_type_map.get(file_ext, 'jpeg')
+        
+        # 使用base64编码
+        base64_image = self._image_to_base64(file_path)
+
+        # 调用Qwen-VL模型进行OCR
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/{mime_type};base64,{base64_image}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": self.prompt
+                    }
+                ]
+            }]
+        )
+        markdown_content = response.choices[0].message.content
+
+        return OCRResult(
+            markdown=markdown_content,
+            page_count=1,
+            file_name=Path(file_path).name,
+            file_info={
+                'original_name': Path(file_path).name,
+                'size_bytes': os.path.getsize(file_path),
+                'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+                'file_type': 'image',
+                'processing_mode': 'qwen_vl_ocr'
+            },
+            processing_time=time.time() - start_time,
+            status='success'
+        )
+
+
 # class OCRProcessor:
 #     """OCR处理器"""
 #     def __init__(self):
@@ -264,10 +439,7 @@ class InformationProcessor:
     def __init__(self):
         # 动态导入Information_structuring模块
         import sys
-        # 使用相对路径，兼容 Windows 和 Linux
-        backwark_path = str(Path(__file__).parent / 'backwark')
-        if backwark_path not in sys.path:
-            sys.path.insert(0, backwark_path)
+        sys.path.append('c:/Users/Xin/Desktop/codes/LM/DataAnalysis/backend/Data_analysis/backwark')
         from Information_structuring import DataAnalyzer
 
         self.analyzer = DataAnalyzer(
@@ -303,10 +475,7 @@ class VisualizationProcessor:
     def __init__(self):
         # 动态导入visualizer模块
         import sys
-        # 使用相对路径，兼容 Windows 和 Linux
-        backwark_path = str(Path(__file__).parent / 'backwark')
-        if backwark_path not in sys.path:
-            sys.path.insert(0, backwark_path)
+        sys.path.append('c:/Users/Xin/Desktop/codes/LM/DataAnalysis/backend/Data_analysis/backwark')
 
         try:
             from visualizer import ReportGenerator
@@ -319,9 +488,7 @@ class VisualizationProcessor:
         except Exception as e:
             print(f"⚠️ 无法加载真实可视化服务，使用模拟服务: {e}")
             # 使用模拟服务
-            parent_path = str(Path(__file__).parent)
-            if parent_path not in sys.path:
-                sys.path.insert(0, parent_path)
+            sys.path.append('c:/Users/Xin/Desktop/codes/LM/DataAnalysis/backend/Data_analysis')
             from mock_visualizer import MockReportGenerator
             self.generator = MockReportGenerator(
                 api_key=config.VISUALIZER_API_KEY,
@@ -351,9 +518,7 @@ class VisualizationProcessor:
                 # 真实服务失败时，尝试使用模拟服务
                 try:
                     import sys
-                    parent_path = str(Path(__file__).parent)
-                    if parent_path not in sys.path:
-                        sys.path.insert(0, parent_path)
+                    sys.path.append('c:/Users/Xin/Desktop/codes/LM/DataAnalysis/backend/Data_analysis')
                     from mock_visualizer import MockReportGenerator
                     mock_generator = MockReportGenerator(
                         api_key=config.VISUALIZER_API_KEY,
