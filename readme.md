@@ -2,14 +2,15 @@
 
 ## 项目简介
 
-这是一个基于大语言模型的智能文档分析系统，能够自动处理PDF文档或图片，提取关键信息并生成交互式数据分析报告。系统采用前后端分离架构，集成了OCR识别、智能文本分析和数据可视化等功能模块。
+这是一个基于大语言模型的智能文档分析系统，能够自动处理PDF文档或图片，提取关键信息并生成交互式数据分析报告。系统采用前后端分离架构，集成了DeepSeek-OCR识别、智能文本分析和数据可视化等功能模块。通过云端API调用，大大降低了本地部署的硬件要求。
 
 ## 核心功能
 
-### 1. OCR文档解析
+### 1. 云端OCR文档解析
 - 支持PDF文档和图片格式的文本提取
-- 基于DeepSeek-OCR模型，利用CUDA加速处理
+- **新升级**：集成DeepSeek-OCR云端API，无需本地GPU资源
 - 自动将识别结果转换为结构化的Markdown格式
+- 支持多页PDF自动分页处理
 
 ### 2. 智能信息提取
 - 基于文档标题结构的智能文本切分
@@ -18,10 +19,10 @@
 - 保留完整的层级结构和上下文信息
 
 ### 3. 可视化报告生成
+- **架构重构**：采用"Template + Structured JSON"模式
 - 自动生成交互式HTML数据分析报告
-- 支持多种图表类型（柱状图、折线图、饼图等）
-- 响应式设计，适配不同设备
-- 可导出为PDF格式
+- 支持KPI指标卡、折线图、柱状图、饼图等多种组件
+- 响应式深色霓虹主题设计
 
 ### 4. 实时对话助手
 - 基于分析结果的智能问答
@@ -42,13 +43,11 @@
 - FastAPI 0.119 RESTful API框架
 - LangChain 大语言模型集成
 - Pydantic 2.x 数据验证
-- CUDA 12.x GPU加速
 
 ### AI/ML技术
-- DeepSeek-OCR 文档识别模型
-- Qwen3-Max / GPT-4 文本分析
-- vLLM 推理引擎
-- Flash-Attention 2.7 推理加速
+- **DeepSeek-OCR API**：文档识别（兼容OpenAI格式）
+- Qwen3-Max / GPT-4：文本分析与结构化
+- 模板化生成引擎：数据可视化渲染
 
 ## 系统架构
 
@@ -70,13 +69,13 @@
 ┌────────────▼─────────────────────────┐
 │  处理层                               │
 │  ┌────────────┐  ┌─────────────┐    │
-│  │ OCR引擎    │→│ 信息结构化   │    │
-│  │ (GPU加速)  │  │ (LangChain) │    │
+│  │ OCR云端API  │→│ 信息结构化   │    │
+│  │ (DeepSeek) │  │ (LangChain) │    │
 │  └────────────┘  └──────┬──────┘    │
 │                          │            │
 │                  ┌───────▼────────┐  │
 │                  │  可视化生成     │  │
-│                  │  (HTML报告)    │  │
+│                  │  (HTML模板)    │  │
 │                  └────────────────┘  │
 └──────────────────────────────────────┘
 ```
@@ -86,8 +85,7 @@
 ### 环境要求
 - Node.js 18+ 和 npm/pnpm
 - Python 3.10+
-- CUDA 12.x（可选，用于OCR加速）
-- 至少 16GB RAM
+- 任意普通PC（无需高性能GPU）
 
 ### 安装步骤
 
@@ -101,10 +99,10 @@ cd DataAnalysis
 ```bash
 cp .env.example .env
 # 编辑.env文件，配置以下参数：
-# - DEEPSEEK_OCR_URL: OCR服务地址
-# - ANALYSIS_API_KEY: 大语言模型API密钥
-# - ANALYSIS_API_BASE: API基础URL
-# - ANALYSIS_MODEL_NAME: 使用的模型名称
+# - DEEPSEEK_OCR_BASE_URL: OCR服务地址（如 https://api.siliconflow.cn/v1/chat/completions）
+# - DEEPSEEK_OCR_API_KEY: OCR服务密钥
+# - ANALYSIS_API_KEY: 分析用大模型API密钥
+# - ANALYSIS_API_BASE: 分析用API基础URL
 ```
 
 3. 安装依赖
@@ -121,26 +119,16 @@ cd backend/Data_analysis
 pip install -r requirements.txt
 ```
 
-OCR模块（可选）：
-```bash
-cd backend/Data_analysis/DeepSeek-OCR-vllm
-pip install -r requirements.txt
-```
-
 ### 启动服务
 
 按以下顺序启动各个服务：
 
 ```bash
-# 1. 启动OCR服务（终端1）
-cd backend/Data_analysis/DeepSeek-OCR-vllm
-python test_api_server.py
-
-# 2. 启动主API服务（终端2）
+# 1. 启动主API服务（终端1）
 cd backend/Data_analysis
 python main_api.py
 
-# 3. 启动前端开发服务器（终端3）
+# 2. 启动前端开发服务器（终端2）
 cd frontend
 npm run dev
 ```
@@ -162,14 +150,13 @@ DataAnalysis/
 │
 ├── backend/
 │   └── Data_analysis/
-│       ├── main_api.py                    # API服务入口
+│       ├── main_api.py                    # API服务入口（含OCR云端调用）
+│       ├── test_ocr_api.py               # OCR API测试脚本
 │       ├── backwark/                     # 核心处理模块
 │       │   ├── Information_structuring.py # 信息结构化分析
 │       │   ├── visualizer.py             # HTML报告生成
 │       │   └── pdf_exporter.py           # PDF导出
-│       └── DeepSeek-OCR-vllm/           # OCR处理模块
-│           ├── deepseek_ocr.py          # OCR核心逻辑
-│           └── test_api_server.py       # OCR API服务器
+│       └── DeepSeek-OCR-vllm/           # (已废弃) 本地OCR处理模块
 │
 └── .env                        # 环境变量配置
 ```
@@ -199,59 +186,49 @@ cd backend/Data_analysis
 # 启动API服务
 python main_api.py
 
-# 或使用uvicorn（推荐）
-uvicorn main_api:app --reload --host 0.0.0.0 --port 18707
+# 验证OCR配置
+python test_ocr_api.py
 ```
 
 ### API接口
 
 主要API端点：
 
-- `POST /upload_pdf` - 上传PDF文件
-- `POST /process_ocr` - OCR文档处理
-- `POST /analyze_markdown` - Markdown文本分析
-- `GET /analysis_result/{task_id}` - 查询分析结果
-- `POST /generate_report` - 生成可视化报告
+- `POST /upload` - 上传各种格式文档并自动开始处理
+- `GET /status/{task_id}` - 查询全流程处理状态
+- `GET /results/{task_id}` - 获取JSON分析结果
+- `GET /report/{task_id}` - 获取HTML可视化报告
+- `GET /health` - 服务健康检查
 
 ## 技术亮点
 
-### 1. 智能文档切分策略
+### 1. 轻量化OCR解决方案
+从本地重型GPU部署迁移至云端API：
+- 兼容OpenAI格式接口
+- 支持DeepSeek-OCR、硅基流动等多种后端
+- 自动处理PDF转图和分页识别
+
+### 2. 模板化可视化引擎
+重构了报告生成逻辑：
+- LLM仅负责生成结构化JSON数据
+- 使用预设的高质量HTML模板渲染
+- 解决了生成HTML不稳定、样式缺失的问题
+
+### 3. 智能文档切分策略
 实现了基于标题层级的智能文本切分算法，能够：
 - 保留完整的文档结构和上下文信息
 - 自动识别和处理多级标题
-- 动态调整chunk大小，避免超出模型token限制
+- 动态调整chunk大小
 
-### 2. 高并发LLM分析
+### 4. 高并发LLM分析
 采用多线程并发处理机制：
-- 默认10并发workers，可根据资源动态调整
+- 默认10并发workers
 - 使用线程池管理，提高处理效率
-- 支持断点续传和任务重试
-
-### 3. GPU加速OCR处理
-集成vLLM推理引擎：
-- 支持CUDA加速的OCR识别
-- Flash-Attention优化，提升推理速度
-- 批处理优化，降低显存占用
-
-### 4. 前后端分离架构
-采用现代化的开发模式：
-- RESTful API设计，接口清晰
-- TypeScript类型安全
-- 响应式UI设计
-- 模块化代码组织
-
-### 5. 可扩展的模型接入
-支持多种大语言模型：
-- 统一的LangChain接口
-- 通过环境变量配置模型
-- 易于切换和测试不同模型
 
 ## 性能指标
 
-- OCR处理速度：约5-10秒/页（GPU加速）
+- OCR处理速度：取决于云端API响应速度（通常3-5秒/页）
 - 文本分析：支持10并发处理
-- 单次处理文档大小：最大50MB
-- 前端构建大小：约2MB（gzip压缩）
 
 ## 部署建议
 
@@ -278,26 +255,26 @@ gunicorn main_api:app \
 FROM python:3.10-slim
 WORKDIR /app
 COPY backend/Data_analysis /app
+# 安装OCR依赖库
+RUN apt-get update && apt-get install -y poppler-utils
 RUN pip install -r requirements.txt
 EXPOSE 18707
 CMD ["uvicorn", "main_api:app", "--host", "0.0.0.0", "--port", "18707"]
 ```
 
-## 后续优化方向
+## 注意事项
 
-- 支持更多文档格式（Word、Excel等）
-- 增加用户认证和权限管理
-- 优化大文件的流式处理
-- 添加分析结果缓存机制
-- 支持自定义分析模板
+1. PDF处理需要系统安装 `poppler-utils`
+2. 即使没有GPU也可以完整运行所有功能
+3. OCR API需要配置正确的BASE_URL和API_KEY
 
+## 许可证
 
-# 项目更新日志
+本项目仅供学习和研究使用。
 
-## 2026-02-12 - 前后端API端点统一修复
+## 联系方式
 
-### 更新背景
-前端代码基于旧版backend_integration_api.py设计，与当前main_api.py端点不匹配，导致文件上传404错误。本次更新统一了API端点规范，确保前后端通信正常。
+如有问题或建议，请通过issue或email联系。
 
 ### 核心改动
 **前端文件**：`frontend/components/ChatAssistant.tsx`、`frontend/components/api.ts`、`frontend/components/DataVisualization.tsx`
