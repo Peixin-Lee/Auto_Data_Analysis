@@ -66,7 +66,7 @@ export async function uploadFileForOCR(
   formData.append('use_real_service', options.useRealService?.toString() || 'false');
 
   try {
-    const response = await fetch(`${API_BASE_URL}/ocr`, {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -86,25 +86,8 @@ export async function uploadFileForOCR(
  * 直接调用真实OCR服务
  */
 export async function callRealOCR(file: File, enableDescription: boolean = false): Promise<OCRResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('enable_description', enableDescription.toString());
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/ocr/real`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('真实OCR调用失败:', error);
-    throw error;
-  }
+  // 使用统一的上传接口
+  return uploadFileForOCR(file, { enableDescription, useRealService: true });
 }
 
 /**
@@ -112,7 +95,7 @@ export async function callRealOCR(file: File, enableDescription: boolean = false
  */
 export async function getResultsList(): Promise<ResultsListResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/results`);
+    const response = await fetch(`${API_BASE_URL}/tasks`);
 
     if (!response.ok) {
       throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
@@ -128,9 +111,9 @@ export async function getResultsList(): Promise<ResultsListResponse> {
 /**
  * 下载处理结果文件
  */
-export async function downloadResult(filename: string): Promise<void> {
+export async function downloadResult(taskId: string, fileType: 'json' | 'html' | 'markdown' = 'json'): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE_URL}/download/${filename}`);
+    const response = await fetch(`${API_BASE_URL}/download/${taskId}/${fileType}`);
 
     if (!response.ok) {
       throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
@@ -140,7 +123,7 @@ export async function downloadResult(filename: string): Promise<void> {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = `${taskId}.${fileType}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);

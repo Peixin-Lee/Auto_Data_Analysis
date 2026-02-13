@@ -11,8 +11,6 @@ import io
 import json
 import time
 import asyncio
-import re
-import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -48,6 +46,9 @@ app.add_middleware(
 
 # 从环境变量加载配置
 class Config:
+    # # DeepSeek-OCR配置
+    DEEPSEEK_OCR_URL = os.getenv('DEEPSEEK_OCR_URL')
+
     # 数据分析配置
     QWEN_TOKENIZER_PATH = os.getenv('QWEN_TOKENIZER_PATH')
     ANALYSIS_API_KEY = os.getenv('ANALYSIS_API_KEY') 
@@ -341,20 +342,9 @@ class OCRProcessor_qwenvl:
 
 
 class OCRProcessor:
-    """OCR处理器 - 使用DeepSeek-OCR API（兼容OpenAI格式）"""
+    """OCR处理器"""
     def __init__(self):
-        # DeepSeek-OCR API配置
-        self.api_url = os.getenv('DEEPSEEK_OCR_BASE_URL', 'https://api.siliconflow.cn/v1/chat/completions')
-        self.api_key = os.getenv('DEEPSEEK_OCR_API_KEY')
-        self.model = os.getenv('DEEPSEEK_OCR_MODEL_NAME', 'deepseek-ai/DeepSeek-OCR')
-        
-        if not self.api_key:
-            raise ValueError("DEEPSEEK_OCR_API_KEY environment variable is not set")
-    
-    def _image_to_base64(self, file_path: str) -> str:
-        """将图片文件转换为base64编码"""
-        with open(file_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+        self.ocr_url = config.DEEPSEEK_OCR_URL
 
     async def process(self, file_path: str, enable_description: bool = False) -> OCRResult:
         """调用OCR服务或处理文本文件"""
@@ -367,6 +357,7 @@ class OCRProcessor:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
 
+                # 生成模拟的Markdown结果
                 markdown_content = f"""# 文档分析报告
 
 ## 文件信息
@@ -388,10 +379,14 @@ class OCRProcessor:
 ### 结构化信息
 - 标题/章节: 已识别 {content.count('#')} 个标题
 - 段落数量: 已识别 {len(content.split(chr(10) + chr(10)))} 个段落
+- 关键词: 自动提取中...
 
 ---
 *此为文本文件直接处理结果，如需OCR识别请上传图片或PDF文件*
 """
+
+                processing_time = time.time() - start_time
+
                 return OCRResult(
                     markdown=markdown_content,
                     page_count=1,
@@ -403,120 +398,46 @@ class OCRProcessor:
                         'file_type': 'text',
                         'processing_mode': 'direct_text'
                     },
-                    processing_time=time.time() - start_time,
+                    processing_time=processing_time,
                     status='success'
                 )
 
-            # 对于PDF文件，先转换为图片
-            elif file_ext == '.pdf':
-                try:
-                    from pdf2image import convert_from_path
-                except ImportError:
-                    raise HTTPException(500, "pdf2image库未安装")
-                
-                # PDF转图片
-                poppler_path = os.getenv('POPPLER_PATH', None)
-                images = convert_from_path(file_path, dpi=300, poppler_path=poppler_path) if poppler_path else convert_from_path(file_path, dpi=300)
-                
-                # 逐页处理
-                page_markdowns = []
-                temp_dir = Path(config.TEMP_DIR)
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                
-                for i, image in enumerate(images, 1):
-                    temp_image_path = temp_dir / f"pdf_page_{i}_{int(time.time() * 1000)}.png"
-                    image.save(str(temp_image_path), "PNG")
-                    
-                    try:
-                        # 处理单页（复用下面的图片处理逻辑）
-                        base64_image = self._image_to_base64(str(temp_image_path))
-                        api_content = await self._call_api(base64_image, '.png')
-                        texts = re.findall(r'<\|ref\|>(.*?)<\|\/ref\|>', api_content, re.DOTALL)
-                        page_markdown = '\n'.join([t.strip() for t in texts if t.strip()])
-                        page_markdowns.append(f"\n\n--- 第 {i} 页 ---\n\n{page_markdown}")
-                    finally:
-                        if temp_image_path.exists():
-                            temp_image_path.unlink()
-                
-                full_markdown = "".join(page_markdowns)
-                return OCRResult(
-                    markdown=full_markdown,
-                    page_count=len(images),
-                    file_name=Path(file_path).name,
-                    file_info={
-                        'original_name': Path(file_path).name,
-                        'size_bytes': os.path.getsize(file_path),
-                        'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
-                        'file_type': 'pdf',
-                        'processing_mode': 'siliconflow_ocr'
-                    },
-                    processing_time=time.time() - start_time,
-                    status='success'
-                )
-            
-            # 对于图片文件，调用OCR API
+            # 对于图片和PDF文件，调用OCR服务
             else:
-                # 1. 转换为base64
-                base64_image = self._image_to_base64(file_path)
-                
-                # 2. 调用API
-                api_content = await self._call_api(base64_image, file_ext)
-                
-                # 3. 提取文本（从<|ref|>标签中）
-                texts = re.findall(r'<\|ref\|>(.*?)<\|\/ref\|>', api_content, re.DOTALL)
-                
-                # 4. 转换为markdown
-                markdown = '\n'.join([t.strip() for t in texts if t.strip()]) if texts else "未识别到文本内容"
-                
+                with open(file_path, 'rb') as f:
+                    files = {'file': f}
+                    data = {'enable_description': str(enable_description)}
+
+                    response = requests.post(
+                        self.ocr_url,
+                        files=files,
+                        data=data,
+                        timeout=300
+                    )
+
+                if response.status_code != 200:
+                    raise HTTPException(500, f"OCR服务错误: {response.status_code} {response.text}")
+
+                result = response.json()
+                processing_time = time.time() - start_time
+
                 return OCRResult(
-                    markdown=markdown,
-                    page_count=1,
-                    file_name=Path(file_path).name,
+                    markdown=result.get('markdown', ''),
+                    page_count=result.get('page_count', 0),
+                    file_name=result.get('file_name', Path(file_path).name),
                     file_info={
                         'original_name': Path(file_path).name,
                         'size_bytes': os.path.getsize(file_path),
                         'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
-                        'file_type': 'image',
-                        'processing_mode': 'siliconflow_ocr'
+                        'file_type': 'ocr_processed',
+                        'processing_mode': 'ocr_service'
                     },
-                    processing_time=time.time() - start_time,
+                    processing_time=processing_time,
                     status='success'
                 )
 
         except Exception as e:
             raise HTTPException(500, f"OCR处理失败: {str(e)}")
-    
-    async def _call_api(self, base64_image: str, file_ext: str) -> str:
-        """调用硅基流动API"""
-        mime_type = {'jpg': 'jpeg', 'jpeg': 'jpeg', 'png': 'png', 'gif': 'gif', 'bmp': 'bmp', 'webp': 'webp'}.get(file_ext.replace('.', ''), 'jpeg')
-        
-        payload = {
-            "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/{mime_type};base64,{base64_image}"}},
-                    {"type": "text", "text": "<image>\n<|grounding|>OCR this image."}
-                ]
-            }]
-        }
-        
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        
-        # 重试5次
-        for i in range(5):
-            try:
-                response = requests.post(self.api_url, json=payload, headers=headers, timeout=300)
-                response.raise_for_status()
-                data = response.json()
-                if "choices" in data and data["choices"]:
-                    return data["choices"][0]["message"]["content"]
-            except Exception as e:
-                if i == 4:  # 最后一次重试
-                    raise HTTPException(500, f"API调用失败: {str(e)}")
-                time.sleep(1)
-        
-        raise HTTPException(500, "API调用失败")
 
 class InformationProcessor:
     """信息结构化处理器"""
@@ -756,7 +677,7 @@ async def upload_document(
 
         # 启动后台处理
         background_tasks.add_task(
-            process_document_task, # 后台处理函数
+            process_document_task,
             task_id,
             str(temp_path),
             enable_description,

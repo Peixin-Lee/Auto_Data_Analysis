@@ -31,7 +31,7 @@ async function uploadDocument(file: File, userQuery: string = '分析此文档�
   formData.append('enable_description', 'true');
   formData.append('user_query', userQuery);
 
-  const response = await fetch(`${API_BASE_URL}/ocr`, {
+  const response = await fetch(`${API_BASE_URL}/upload`, {
     method: 'POST',
     body: formData,
   });
@@ -115,58 +115,12 @@ export function ChatAssistant({ theme, onProcessingComplete }: ChatAssistantProp
     const userQuestion = inputValue;
     setMessages([...messages,
       { type: 'user', content: userQuestion },
-      { type: 'assistant', content: '收到您的问题，正在分析数据并生成可视化报告...' }
+      { type: 'assistant', content: '您的文档已经完成分析，可视化报告已在左侧显示。\n\n如需重新分析不同角度，请上传新文档。' }
     ]);
     setInputValue('');
 
-    try {
-      // 调用分析接口
-      const response = await fetch(`${API_BASE_URL}/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          task_id: currentTask.task_id,
-          user_query: userQuestion
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`分析失败: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      // 添加分析结果消息
-      const resultMessage: ChatMessage = {
-        type: 'assistant',
-        content: `分析完成！\n\n${result.summary}\n\n可视化报告已在左侧显示，您可以继续提问进行更深入的分析。`
-      };
-      setMessages(prev => [...prev, resultMessage]);
-
-      // 通知父组件渲染左侧可视化报告
-      if (onProcessingComplete) {
-        onProcessingComplete({
-          visualization_result: {
-            html: result.html,
-            title: result.title,
-            summary: result.summary,
-            answer_id: result.answer_id,
-            report_url: result.report_url
-          },
-          user_query: userQuestion
-        }, currentTask.task_id);
-      }
-
-    } catch (error) {
-      console.error('分析失败:', error);
-      const errorMessage: ChatMessage = {
-        type: 'assistant',
-        content: `分析失败: ${error instanceof Error ? error.message : '未知错误'}`
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    }
+    // 注意：main_api.py 在上传时已自动完成 OCR+结构化+可视化
+    // 不需要额外的 /analyze 端点
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -11,10 +11,10 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
 
 # ==================== 配置 ====================
-# 从环境变量读取配置（请在 .env 文件中配置）
+# 从环境变量读取配置
 API_KEY = os.getenv("VISUALIZER_API_KEY")
-API_BASE = os.getenv("VISUALIZER_API_BASE", "https://aizex.top/v1")
-MODEL_NAME = os.getenv("VISUALIZER_MODEL_NAME", "gpt-5")
+API_BASE = os.getenv("VISUALIZER_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+MODEL_NAME = os.getenv("VISUALIZER_MODEL_NAME", "qwen-max")
 
 # ==================== 数据模型 ====================
 class HTMLReport(BaseModel):
@@ -202,15 +202,25 @@ class ReportGenerator:
 
                 {format_instructions}
 
-                请把 user_requirements 与 data_json 结合，产出 **HTML / title / summary**。HTML 必须渲染酷炫三栏、≥7 张图（若数据允许），summary 直接回答用户问题的结论。""",
+                请把 user_requirements 与 data_json 结合，产出 **HTML / title / summary**。HTML 必须渲染酷炫三栏、≥7 张图（若数据允许），summary 直接回答用户问题的结论。
+
+                只输出严格 JSON 对象，不要 Markdown，不要代码块，不要多余字段。""",
                     input_variables=["user_query", "knowledge_base"],
                     partial_variables={"format_instructions": self.output_parser.get_format_instructions()}
                 )
 
-
-
-        
         self.chain = self.prompt | self.llm
+
+        self.repair_prompt = PromptTemplate(
+            template=(
+                "你之前的输出未通过解析。请严格按以下格式返回，仅输出 JSON，不要 Markdown，不要代码块。\n"
+                "{format_instructions}\n"
+                "无效输出如下:\n{bad_output}"
+            ),
+            input_variables=["bad_output"],
+            partial_variables={"format_instructions": self.output_parser.get_format_instructions()},
+        )
+        self.repair_chain = self.repair_prompt | self.llm
     
     def generate_report(self, analyzed_data: Dict[str, Any], user_query: str) -> HTMLReport:
         """
@@ -236,7 +246,65 @@ class ReportGenerator:
             "knowledge_base": knowledge_base
         })
         
-        report = self.output_parser.parse(result.content)
+        # 清理LLM输出：去除markdown代码块标记
+        content = result.content.strip()
+        
+        # 移除开头的 ```json 或 ``` 标记
+        if content.startswith("```json"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        
+        # 移除结尾的 ``` 标记
+        if content.endswith("```"):
+            content = content[:-3]
+        
+        content = content.strip()
+        
+        # 解析JSON
+        try:
+            report = self.output_parser.parse(content)
+        except Exception as parse_error:
+            print(f"⚠️ HTMLReport 解析失败，尝试修复输出: {parse_error}")
+            repaired = self.repair_chain.invoke({"bad_output": content})
+            repaired_content = repaired.content.strip()
+
+            if repaired_content.startswith("```json"):
+                repaired_content = repaired_content[7:]
+            elif repaired_content.startswith("```"):
+                repaired_content = repaired_content[3:]
+            if repaired_content.endswith("```"):
+                repaired_content = repaired_content[:-3]
+
+            repaired_content = repaired_content.strip()
+            report = self.output_parser.parse(repaired_content)
+        
+        # 后处理HTML：确保ECharts在DOM加载后初始化
+        html = report.html
+        
+        # 查找直接调用renderKPIs()和renderCharts()的位置
+        # 将它们包裹在DOMContentLoaded事件中以确保在iframe中正常工作
+        if "renderKPIs();" in html and "renderCharts();" in html:
+            html = html.replace(
+                "renderKPIs();\n        renderCharts();",
+                """// 确保DOM完全加载后再初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(() => {
+                    renderKPIs();
+                    renderCharts();
+                }, 100);
+            });
+        } else {
+            // DOM已经加载完成
+            setTimeout(() => {
+                renderKPIs();
+                renderCharts();
+            }, 100);
+        }"""
+            )
+            report.html = html
+            print("✅ 已优化HTML以支持iframe渲染")
         
         print(f"报告生成完成: {report.title}")
         

@@ -29,8 +29,13 @@ export function DataVisualization({ theme, onPreviewReport, processedResults, ta
     const { html, title, summary, report_url, answer_id } = processedResults.visualization_result;
 
     const handleExportPDF = async () => {
-      if (!taskId || !answer_id) {
-        alert('无法导出 PDF：缺少必要的参数');
+      // 注意：main_api.py 未实现 /export_pdf 端点
+      // 使用浏览器的打印功能代替
+      alert('PDF导出功能暂未实现。您可以使用浏览器的打印功能（Ctrl+P）保存为PDF。');
+      
+      /* 原实现代码（待后端支持后恢复）
+      if (!taskId) {
+        alert('无法导出 PDF：缺少任务ID');
         return;
       }
 
@@ -44,7 +49,7 @@ export function DataVisualization({ theme, onPreviewReport, processedResults, ta
             task_id: taskId,
             answer_id: answer_id,
             title: title || '数据分析报告',
-            regenerate: false  // 可以改为 true 以生成更精美的报告
+            regenerate: false
           })
         });
 
@@ -68,6 +73,7 @@ export function DataVisualization({ theme, onPreviewReport, processedResults, ta
         console.error('导出 PDF 失败:', error);
         alert(`导出 PDF 失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
+      */
     };
 
     const handleViewFullReport = () => {
@@ -135,9 +141,19 @@ export function DataVisualization({ theme, onPreviewReport, processedResults, ta
               srcDoc={html}
               className="w-full h-full border-0"
               title="可视化报告"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              onLoad={(e) => {
+                // 等待iframe加载完成后，触发iframe内部的resize事件
+                setTimeout(() => {
+                  const iframe = e.target as HTMLIFrameElement;
+                  if (iframe.contentWindow) {
+                    iframe.contentWindow.dispatchEvent(new Event('resize'));
+                  }
+                }, 300);
+              }}
               style={{
-                minHeight: '800px',
+                minHeight: '1200px',
+                height: 'calc(100vh - 200px)',
                 width: '100%',
                 backgroundColor: 'transparent'
               }}
